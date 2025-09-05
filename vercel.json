@@ -22,8 +22,14 @@
     }
   ],
   "functions": {
-    "api/chat.js": {
-      "maxDuration": 30
+    "api/join.js": {
+      "maxDuration": 10
+    },
+    "api/message.js": {
+      "maxDuration": 10  
+    },
+    "api/messages.js": {
+      "maxDuration": 10
     }
   },
   "env": {
