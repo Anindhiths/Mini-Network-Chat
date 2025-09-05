@@ -22,13 +22,7 @@
     }
   ],
   "functions": {
-    "api/join.js": {
-      "maxDuration": 10
-    },
-    "api/message.js": {
-      "maxDuration": 10  
-    },
-    "api/messages.js": {
+    "api/*.js": {
       "maxDuration": 10
     }
   },
