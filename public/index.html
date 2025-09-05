@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mini Network Chat - Vercel Edition</title>
+    <title>Mini Network Chat - Real-Time</title>
     <style>
         * {
             margin: 0;
@@ -66,6 +66,18 @@
             border-radius: 50%;
             margin-right: 8px;
             background: #28a745;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .status-disconnected {
+            background: #dc3545 !important;
+            animation: none;
         }
 
         .login-screen {
@@ -246,20 +258,13 @@
             text-align: center;
         }
 
-        .info-banner {
-            background: #d1ecf1;
-            color: #0c5460;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 20px;
-            text-align: center;
-            font-size: 14px;
-        }
-
-        .info-banner strong {
-            display: block;
-            margin-bottom: 8px;
-            font-size: 16px;
+        .real-time-badge {
+            background: #28a745;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
         }
 
         /* Mobile responsiveness */
@@ -284,13 +289,10 @@
     <div class="chat-container">
         <div class="chat-header">
             <div class="chat-title">💬 Mini Network Chat</div>
-            <div class="chat-subtitle">Vercel Serverless Edition</div>
-        </div>
-
-        <div class="info-banner">
-            <strong>🚀 Deployed on Vercel!</strong>
-            This is a serverless version using HTTP polling instead of WebSocket. 
-            Messages refresh every 2 seconds for real-time feel.
+            <div class="chat-subtitle">
+                <span class="real-time-badge">REAL-TIME</span>
+                No bots • Real people only
+            </div>
         </div>
 
         <div class="connection-status">
@@ -306,7 +308,10 @@
         <!-- Login Screen -->
         <div class="login-screen" id="loginScreen">
             <div class="login-form">
-                <h2>Join the Chat</h2>
+                <h2>Join Real-Time Chat</h2>
+                <p style="margin-bottom: 20px; color: #666; font-size: 14px;">
+                    Connect with real people • No bots or fake messages
+                </p>
                 <div id="errorMessage" class="error-message" style="display: none;"></div>
                 <input type="text" id="usernameInput" placeholder="Enter your username" maxlength="30" required>
                 <button onclick="joinChat()" id="connectButton">Join Chat</button>
@@ -316,11 +321,11 @@
         <!-- Main Chat Interface -->
         <div class="chat-main" id="chatMain">
             <div class="messages-container" id="messagesContainer">
-                <!-- Messages will be added here dynamically -->
+                <!-- Real messages will appear here -->
             </div>
 
             <div class="input-container">
-                <input type="text" id="messageInput" class="message-input" placeholder="Type your message..." maxlength="2000">
+                <input type="text" id="messageInput" class="message-input" placeholder="Type your message..." maxlength="1000">
                 <button onclick="sendMessage()" id="sendButton" class="send-button">Send</button>
             </div>
         </div>
@@ -329,8 +334,8 @@
     <script>
         let username = '';
         let connected = false;
+        let eventSource = null;
         let lastMessageId = 0;
-        let pollInterval;
 
         // DOM elements
         const loginScreen = document.getElementById('loginScreen');
@@ -338,6 +343,7 @@
         const usernameInput = document.getElementById('usernameInput');
         const messageInput = document.getElementById('messageInput');
         const messagesContainer = document.getElementById('messagesContainer');
+        const statusIndicator = document.getElementById('statusIndicator');
         const statusText = document.getElementById('statusText');
         const userCount = document.getElementById('userCount');
         const connectButton = document.getElementById('connectButton');
@@ -350,6 +356,11 @@
             setTimeout(() => {
                 errorMessage.style.display = 'none';
             }, 5000);
+        }
+
+        function updateConnectionStatus(status, text) {
+            statusIndicator.className = 'status-indicator ' + (status === 'connected' ? '' : 'status-disconnected');
+            statusText.textContent = text;
         }
 
         async function joinChat() {
@@ -370,12 +381,16 @@
             connectButton.textContent = 'Joining...';
 
             try {
-                const response = await fetch('/api/join', {
+                // Send join request
+                const response = await fetch('/api/send-message', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ username: username })
+                    body: JSON.stringify({ 
+                        username: username,
+                        action: 'join'
+                    })
                 });
 
                 const data = await response.json();
@@ -386,10 +401,10 @@
                     chatMain.style.display = 'flex';
                     messageInput.focus();
 
-                    // Start polling for messages
-                    startPolling();
+                    // Start real-time connection
+                    startRealTimeConnection();
 
-                    addSystemMessage(`Welcome ${username}! You joined the chat.`);
+                    updateConnectionStatus('connected', 'Connected (Real-time)');
                 } else {
                     showError(data.error || 'Failed to join chat');
                     connectButton.disabled = false;
@@ -399,6 +414,48 @@
                 showError('Connection failed. Please try again.');
                 connectButton.disabled = false;
                 connectButton.textContent = 'Join Chat';
+            }
+        }
+
+        function startRealTimeConnection() {
+            // Use Server-Sent Events for real-time messaging
+            eventSource = new EventSource(`/api/chat-stream?since=${lastMessageId}`);
+
+            eventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleMessage(data);
+                } catch (error) {
+                    console.error('Error parsing SSE message:', error);
+                }
+            };
+
+            eventSource.onerror = function(error) {
+                console.error('SSE error:', error);
+                updateConnectionStatus('disconnected', 'Connection lost - Reconnecting...');
+
+                // Attempt to reconnect after delay
+                setTimeout(() => {
+                    if (connected) {
+                        startRealTimeConnection();
+                    }
+                }, 3000);
+            };
+
+            eventSource.onopen = function() {
+                updateConnectionStatus('connected', 'Connected (Real-time)');
+            };
+        }
+
+        function handleMessage(data) {
+            if (data.type === 'message') {
+                addMessage(data.username, data.message, data.username === username, data.timestamp);
+                lastMessageId = Math.max(lastMessageId, data.id || 0);
+            } else if (data.type === 'system') {
+                addSystemMessage(data.message);
+                lastMessageId = Math.max(lastMessageId, data.id || 0);
+            } else if (data.type === 'user_count') {
+                updateUserCount(data.count);
             }
         }
 
@@ -414,7 +471,7 @@
             sendButton.textContent = 'Sending...';
 
             try {
-                const response = await fetch('/api/message', {
+                const response = await fetch('/api/send-message', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -429,7 +486,7 @@
 
                 if (data.success) {
                     messageInput.value = '';
-                    // Message will appear via polling
+                    // Message will appear via SSE
                 } else {
                     showError('Failed to send message');
                 }
@@ -441,45 +498,19 @@
             }
         }
 
-        async function pollMessages() {
-            try {
-                const response = await fetch(`/api/messages?since=${lastMessageId}`);
-                const data = await response.json();
-
-                if (data.success && data.messages) {
-                    data.messages.forEach(msg => {
-                        if (msg.type === 'message') {
-                            addMessage(msg.username, msg.message, msg.username === username);
-                        } else if (msg.type === 'system') {
-                            addSystemMessage(msg.message);
-                        }
-                        if (msg.id > lastMessageId) {
-                            lastMessageId = msg.id;
-                        }
-                    });
-
-                    if (data.userCount !== undefined) {
-                        updateUserCount(data.userCount);
-                    }
-                }
-            } catch (error) {
-                console.log('Polling error:', error);
-            }
-        }
-
-        function startPolling() {
-            pollMessages(); // Initial load
-            pollInterval = setInterval(pollMessages, 2000); // Poll every 2 seconds
-        }
-
-        function addMessage(sender, message, isOwn) {
+        function addMessage(sender, message, isOwn, timestamp) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isOwn ? 'own' : 'other'}`;
 
-            const time = new Date().toLocaleTimeString(undefined, {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
+            const time = timestamp ? 
+                new Date(timestamp).toLocaleTimeString(undefined, {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                }) :
+                new Date().toLocaleTimeString(undefined, {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
 
             messageDiv.innerHTML = `
                 ${!isOwn ? `<div class="message-sender">${escapeHtml(sender)}</div>` : ''}
@@ -523,23 +554,30 @@
             }
         });
 
+        // Handle page unload
+        window.addEventListener('beforeunload', function() {
+            if (connected && username) {
+                // Send leave message
+                navigator.sendBeacon('/api/send-message', JSON.stringify({
+                    username: username,
+                    action: 'leave'
+                }));
+            }
+
+            if (eventSource) {
+                eventSource.close();
+            }
+        });
+
         // Auto-focus username input
         usernameInput.focus();
 
-        // Initialize with some demo messages
+        // Show welcome message
         setTimeout(() => {
-            addSystemMessage("🚀 This chat is now running on Vercel serverless!");
-            addMessage("Alice", "Hi everyone! The serverless deployment is working!", false);
-            addMessage("Bob", "Amazing! It works without WebSockets too.", false);
-            addSystemMessage("💡 Messages refresh every 2 seconds for real-time feel");
-        }, 1000);
-
-        // Handle page unload
-        window.addEventListener('beforeunload', function() {
-            if (pollInterval) {
-                clearInterval(pollInterval);
+            if (!connected) {
+                addSystemMessage("Welcome! Enter your username to start chatting with real people.");
             }
-        });
+        }, 1000);
     </script>
 </body>
 </html>
