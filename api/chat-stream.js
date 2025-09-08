@@ -32,7 +32,16 @@ export default async function handler(req, res) {
 
   try {
     // Get messages from Redis and filter since last ID
-    let messages = (await redis.lrange('chat:messages', 0, -1)).map(JSON.parse);
+    let rawMessages = await redis.lrange('chat:messages', 0, -1);
+    let messages = rawMessages.map(msg => {
+      try {
+        return typeof msg === 'string' ? JSON.parse(msg) : msg;
+      } catch (error) {
+        console.error('Error parsing message:', msg, error);
+        return null;
+      }
+    }).filter(msg => msg !== null);
+
     const recentMessages = messages.filter(msg => msg.id > sinceId);
 
     recentMessages.forEach(msg => {
@@ -58,7 +67,16 @@ export default async function handler(req, res) {
     const messageCheck = setInterval(async () => {
       try {
         // Get latest messages from Redis
-        const latestMessages = (await redis.lrange('chat:messages', 0, -1)).map(JSON.parse);
+        const rawLatestMessages = await redis.lrange('chat:messages', 0, -1);
+        const latestMessages = rawLatestMessages.map(msg => {
+          try {
+            return typeof msg === 'string' ? JSON.parse(msg) : msg;
+          } catch (error) {
+            console.error('Error parsing message in polling:', msg, error);
+            return null;
+          }
+        }).filter(msg => msg !== null);
+
         const newMessages = latestMessages.filter(msg => msg.id > lastCheckedId);
         
         if (newMessages.length > 0) {
