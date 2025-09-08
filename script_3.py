@@ -1,15 +1,19 @@
-# Create API endpoints for Vercel serverless functions
+# script_3.py
 
-# Join endpoint
-join_api = '''// API endpoint for joining the chat
-let chatData = {
-  users: new Set(),
-  messages: [],
-  messageId: 0
-};
+import os
+
+# Create the api directory if it doesn't exist
+os.makedirs('api', exist_ok=True)
+
+# Join endpoint using Upstash Redis
+join_api = '''import { Redis } from '@upstash/redis';
+
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+});
 
 export default async function handler(req, res) {
-  // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -22,66 +26,72 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  try {
-    const { username } = req.body;
-
-    if (!username || typeof username !== 'string') {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Username is required' 
+  let body = req.body;
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch (err) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid JSON body'
       });
     }
+  }
 
-    const trimmedUsername = username.trim();
-    
-    if (trimmedUsername.length < 2 || trimmedUsername.length > 30) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Username must be between 2 and 30 characters' 
-      });
-    }
+  const { username } = body;
 
-    // Check if username is already taken
-    if (chatData.users.has(trimmedUsername)) {
-      return res.status(409).json({ 
-        success: false, 
-        error: 'Username already taken' 
-      });
-    }
-
-    // Add user
-    chatData.users.add(trimmedUsername);
-    
-    // Add system message
-    const joinMessage = {
-      id: ++chatData.messageId,
-      type: 'system',
-      message: `${trimmedUsername} joined the chat`,
-      timestamp: new Date().toISOString(),
-      username: null
-    };
-    
-    chatData.messages.push(joinMessage);
-
-    // Keep only last 100 messages to prevent memory issues
-    if (chatData.messages.length > 100) {
-      chatData.messages = chatData.messages.slice(-100);
-    }
-
-    return res.status(200).json({
-      success: true,
-      userCount: chatData.users.size,
-      messageId: chatData.messageId
-    });
-
-  } catch (error) {
-    console.error('Join API error:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Internal server error'
+  if (!username || typeof username !== 'string') {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Username is required' 
     });
   }
-}'''
+
+  const trimmedUsername = username.trim();
+
+  if (trimmedUsername.length < 2 || trimmedUsername.length > 30) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Username must be between 2 and 30 characters' 
+    });
+  }
+
+  // Get users from Redis
+  let users = (await redis.smembers('chat:users')) || [];
+
+  // Check if username is already taken
+  if (users.includes(trimmedUsername)) {
+    return res.status(409).json({ 
+      success: false, 
+      error: 'Username already taken' 
+    });
+  }
+
+  // Add user to Redis set
+  await redis.sadd('chat:users', trimmedUsername);
+
+  // Add system message
+  const joinMessage = {
+    id: Date.now(),
+    type: 'system',
+    message: `${trimmedUsername} joined the chat`,
+    timestamp: new Date().toISOString(),
+    username: null
+  };
+
+  await redis.rpush('chat:messages', JSON.stringify(joinMessage));
+  // Keep only last 100 messages
+  await redis.ltrim('chat:messages', -100, -1);
+
+  users.push(trimmedUsername);
+
+  return res.status(200).json({
+    success: true,
+    userCount: users.length,
+    messageId: joinMessage.id
+  });
+}
+'''
 
 # Save join API
 with open('api/join.js', 'w') as f:
