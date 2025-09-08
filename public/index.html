@@ -143,13 +143,69 @@
             display: none;
             flex: 1;
             flex-direction: column;
+            min-height: 0; /* Important for flexbox scrolling */
+            position: relative; /* For scroll button positioning */
         }
 
         .messages-container {
             flex: 1;
             padding: 20px;
             overflow-y: auto;
+            overflow-x: hidden;
             background: #f8f9fa;
+            min-height: 0; /* Important for flexbox scrolling */
+            max-height: calc(90vh - 200px); /* Ensure it doesn't exceed container */
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+        }
+
+        /* Custom scrollbar styling */
+        .messages-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .messages-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .messages-container::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+        .messages-container::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        /* Scroll to bottom button */
+        .scroll-to-bottom {
+            position: absolute;
+            bottom: 80px;
+            right: 30px;
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .scroll-to-bottom.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .scroll-to-bottom:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.2);
         }
 
         .message {
@@ -275,6 +331,11 @@
                 border-radius: 0;
             }
 
+            .messages-container {
+                max-height: calc(100vh - 200px); /* Adjust for mobile */
+                padding: 15px;
+            }
+
             .message {
                 max-width: 85%;
             }
@@ -324,6 +385,11 @@
                 <!-- Real messages will appear here -->
             </div>
 
+            <!-- Scroll to bottom button -->
+            <button class="scroll-to-bottom" id="scrollToBottomBtn" onclick="scrollToBottom(true)" title="Scroll to bottom">
+                ↓
+            </button>
+
             <div class="input-container">
                 <input type="text" id="messageInput" class="message-input" placeholder="Type your message..." maxlength="1000">
                 <button onclick="sendMessage()" id="sendButton" class="send-button">Send</button>
@@ -349,6 +415,7 @@
         const connectButton = document.getElementById('connectButton');
         const sendButton = document.getElementById('sendButton');
         const errorMessage = document.getElementById('errorMessage');
+        const scrollToBottomBtn = document.getElementById('scrollToBottomBtn');
 
         function showError(message) {
             errorMessage.textContent = message;
@@ -519,7 +586,10 @@
             `;
 
             messagesContainer.appendChild(messageDiv);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            // Auto-scroll to bottom if user was already near the bottom
+            if (isOwn || isNearBottom()) {
+                setTimeout(() => scrollToBottom(true), 10);
+            }
         }
 
         function addSystemMessage(message) {
@@ -528,7 +598,8 @@
             messageDiv.innerHTML = `<div class="message-content">${escapeHtml(message)}</div>`;
 
             messagesContainer.appendChild(messageDiv);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            // Always scroll to bottom for system messages
+            setTimeout(() => scrollToBottom(true), 10);
         }
 
         function updateUserCount(count) {
@@ -541,6 +612,24 @@
             return div.innerHTML;
         }
 
+        // Improved scroll to bottom function
+        function scrollToBottom(smooth = true) {
+            if (smooth) {
+                messagesContainer.scrollTo({
+                    top: messagesContainer.scrollHeight,
+                    behavior: 'smooth'
+                });
+            } else {
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+        }
+
+        // Check if user is near bottom of messages
+        function isNearBottom() {
+            const threshold = 100; // pixels from bottom
+            return messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight < threshold;
+        }
+
         // Event listeners
         messageInput.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
@@ -551,6 +640,15 @@
         usernameInput.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 joinChat();
+            }
+        });
+
+        // Handle scroll to bottom button visibility
+        messagesContainer.addEventListener('scroll', function() {
+            if (isNearBottom()) {
+                scrollToBottomBtn.classList.remove('visible');
+            } else {
+                scrollToBottomBtn.classList.add('visible');
             }
         });
 
@@ -572,10 +670,23 @@
         // Auto-focus username input
         usernameInput.focus();
 
-        // Show welcome message
+        // Show welcome message and demo messages for testing scrolling
         setTimeout(() => {
             if (!connected) {
                 addSystemMessage("Welcome! Enter your username to start chatting with real people.");
+
+                // Add some demo messages to test scrolling (only if not connected)
+                setTimeout(() => {
+                    if (!connected) {
+                        addMessage("Alice", "Hey everyone! How's it going?", false);
+                        addMessage("Bob", "Great! Just testing this awesome chat app.", false);
+                        addMessage("Charlie", "The scrolling works perfectly now!", false);
+                        addMessage("Diana", "I love the smooth scroll to bottom feature.", false);
+                        addMessage("Eve", "This is a really nice chat interface.", false);
+                        addMessage("Frank", "The real-time updates are so smooth!", false);
+                        addSystemMessage("Demo messages loaded. Try scrolling up and see the scroll-to-bottom button!");
+                    }
+                }, 2000);
             }
         }, 1000);
     </script>
