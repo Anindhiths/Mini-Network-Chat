@@ -1,86 +1,19 @@
-# Create messages polling API
-messages_api = '''// API endpoint for polling messages
-// This endpoint returns messages since a given message ID
+# script_5.py
 
-// Shared in-memory storage (same limitation as other endpoints)
-let chatData = {
-  users: new Set(['Alice', 'Bob', 'Charlie', 'TestBot']),
-  messages: [
-    {
-      id: 1,
-      type: 'system',
-      message: 'Welcome to the serverless chat! 🚀',
-      timestamp: new Date(Date.now() - 300000).toISOString(), // 5 min ago
-      username: null
-    },
-    {
-      id: 2,
-      type: 'message',
-      message: 'Hi everyone! This chat is now running on Vercel!',
-      timestamp: new Date(Date.now() - 240000).toISOString(), // 4 min ago
-      username: 'Alice'
-    },
-    {
-      id: 3,
-      type: 'message',
-      message: 'Amazing serverless deployment! No more terminal needed.',
-      timestamp: new Date(Date.now() - 180000).toISOString(), // 3 min ago
-      username: 'Bob'
-    },
-    {
-      id: 4,
-      type: 'system',
-      message: 'TestBot joined the chat',
-      timestamp: new Date(Date.now() - 120000).toISOString(), // 2 min ago
-      username: null
-    },
-    {
-      id: 5,
-      type: 'message',
-      message: 'Socket programming meets modern web deployment! 💻',
-      timestamp: new Date(Date.now() - 60000).toISOString(), // 1 min ago
-      username: 'TestBot'
-    }
-  ],
-  messageId: 5,
-  lastActivity: Date.now()
-};
+import os
 
-// Add some demo messages periodically
-function addDemoMessage() {
-  const demoMessages = [
-    { user: 'Alice', text: 'This serverless approach is really cool!' },
-    { user: 'Bob', text: 'No more worrying about server uptime! ⚡' },
-    { user: 'Charlie', text: 'The polling method works surprisingly well.' },
-    { user: 'TestBot', text: 'Bridging C sockets to modern web tech! 🌉' },
-    { user: 'Alice', text: 'Great example of hybrid architecture.' },
-    { user: 'Bob', text: 'Perfect for educational purposes.' }
-  ];
-  
-  // Only add demo message if no recent activity (avoid spam)
-  if (Date.now() - chatData.lastActivity > 30000) { // 30 seconds
-    const demo = demoMessages[Math.floor(Math.random() * demoMessages.length)];
-    const newMessage = {
-      id: ++chatData.messageId,
-      type: 'message',
-      message: demo.text,
-      timestamp: new Date().toISOString(),
-      username: demo.user
-    };
-    
-    chatData.messages.push(newMessage);
-    
-    // Keep only last 50 messages
-    if (chatData.messages.length > 50) {
-      chatData.messages = chatData.messages.slice(-50);
-    }
-    
-    chatData.lastActivity = Date.now();
-  }
-}
+# Create the api directory if it doesn't exist
+os.makedirs('api', exist_ok=True)
+
+# Messages polling API using Upstash Redis
+messages_api = '''import { Redis } from '@upstash/redis';
+
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+});
 
 export default async function handler(req, res) {
-  // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -97,19 +30,23 @@ export default async function handler(req, res) {
     const { since } = req.query;
     const sinceId = since ? parseInt(since) : 0;
 
-    // Add demo message occasionally
-    if (Math.random() < 0.1) { // 10% chance
-      addDemoMessage();
-    }
+    // Get all messages from Redis
+    let messages = (await redis.lrange('chat:messages', 0, -1)).map(JSON.parse);
 
-    // Get messages since the specified ID
-    const newMessages = chatData.messages.filter(msg => msg.id > sinceId);
+    // Filter messages since the specified ID
+    const newMessages = messages.filter(msg => msg.id > sinceId);
+
+    // Get user count from Redis
+    const users = await redis.smembers('chat:users');
+
+    // Find the highest message ID
+    const lastMessageId = messages.length > 0 ? Math.max(...messages.map(m => m.id)) : 0;
 
     return res.status(200).json({
       success: true,
       messages: newMessages,
-      userCount: chatData.users.size,
-      lastMessageId: chatData.messageId,
+      userCount: users.length,
+      lastMessageId,
       serverTime: new Date().toISOString()
     });
 
@@ -120,7 +57,8 @@ export default async function handler(req, res) {
       error: 'Internal server error'
     });
   }
-}'''
+}
+'''
 
 # Save messages API
 with open('api/messages.js', 'w') as f:
