@@ -1,5 +1,13 @@
 
-import { chatState } from './send-message.js';
+// Server-Sent Events endpoint for real-time chat
+// Provides WebSocket-like functionality on Vercel
+
+import { Redis } from '@upstash/redis';
+
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+});
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -25,7 +33,7 @@ export default async function handler(req, res) {
   try {
     // Get messages from Redis and filter since last ID
     let messages = (await redis.lrange('chat:messages', 0, -1)).map(JSON.parse);
-    const recentMessages = chatState.messages.filter(msg => msg.id > sinceId);
+    const recentMessages = messages.filter(msg => msg.id > sinceId);
 
     recentMessages.forEach(msg => {
       res.write(`data: ${JSON.stringify(msg)}\n\n`);
@@ -35,7 +43,7 @@ export default async function handler(req, res) {
     const users = await redis.smembers('chat:users');
     res.write(`data: ${JSON.stringify({
       type: 'user_count',
-      count: chatState.users.size,
+      count: users.length,
       users: users
     })}\n\n`);
 
@@ -59,8 +67,20 @@ export default async function handler(req, res) {
           });
           lastCheckedId = Math.max(...newMessages.map(m => m.id));
         }
+
+        // Also send updated user count
+        const currentUsers = await redis.smembers('chat:users');
+        res.write(`data: ${JSON.stringify({
+          type: 'user_count',
+          count: currentUsers.length,
+          users: currentUsers
+        })}\n\n`);
+
       } catch (error) {
-        // Handle errors gracefully
+        console.error('Error polling for messages:', error);
+        clearInterval(messageCheck);
+        clearInterval(keepAlive);
+        res.end();
       }
     }, 3000);
 
