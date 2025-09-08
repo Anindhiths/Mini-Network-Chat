@@ -2,7 +2,6 @@
   "name": "mini-network-chat-vercel",
   "version": "2.0.0",
   "description": "Mini Network Chat - Vercel Serverless Edition",
-  "main": "public/index.html",
   "scripts": {
     "dev": "vercel dev",
     "build": "echo 'No build step needed for static frontend'",
