@@ -1,13 +1,11 @@
-// Send message endpoint that broadcasts to all SSE connections
-// This creates real multi-user chat functionality
+// api/send-message.js
 
-// Shared state with SSE endpoint (in production, use Redis or database)
-let chatState = {
-  messages: [],
-  users: new Map(), // username -> connection info
-  messageId: 0,
-  sseConnections: new Map() // SSE connections for broadcasting
-};
+import { Redis } from '@upstash/redis';
+
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+});
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -22,99 +20,84 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  try {
-    const { username, message, action = 'message' } = req.body;
-
-    if (!username) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Username is required' 
+  let body = req.body;
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch (err) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid JSON body'
       });
     }
+  }
 
-    const now = new Date();
-    let newMessage;
+  const { username, message, action = 'message' } = body;
 
-    if (action === 'join') {
-      // User joining
-      chatState.users.set(username, {
-        joinedAt: now,
-        lastSeen: now
-      });
-
-      newMessage = {
-        id: ++chatState.messageId,
-        type: 'system',
-        message: `${username} joined the chat`,
-        timestamp: now.toISOString(),
-        username: null
-      };
-    } else if (action === 'leave') {
-      // User leaving
-      chatState.users.delete(username);
-
-      newMessage = {
-        id: ++chatState.messageId,
-        type: 'system', 
-        message: `${username} left the chat`,
-        timestamp: now.toISOString(),
-        username: null
-      };
-    } else {
-      // Regular message
-      if (!message || !message.trim()) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Message cannot be empty' 
-        });
-      }
-
-      // Update user activity
-      if (chatState.users.has(username)) {
-        chatState.users.get(username).lastSeen = now;
-      }
-
-      newMessage = {
-        id: ++chatState.messageId,
-        type: 'message',
-        message: message.trim(),
-        timestamp: now.toISOString(),
-        username: username
-      };
-    }
-
-    // Add to message history
-    chatState.messages.push(newMessage);
-
-    // Keep only last 100 messages
-    if (chatState.messages.length > 100) {
-      chatState.messages = chatState.messages.slice(-100);
-    }
-
-    // Broadcast to all SSE connections
-    broadcastToSSE(newMessage);
-
-    return res.status(200).json({
-      success: true,
-      messageId: chatState.messageId,
-      userCount: chatState.users.size
-    });
-
-  } catch (error) {
-    console.error('Send message error:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Internal server error'
+  if (!username) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Username is required' 
     });
   }
-}
 
-// Function to broadcast messages via SSE (shared with sse endpoint)
-function broadcastToSSE(message) {
-  // In a real app, this would be handled by the SSE endpoint
-  // For now, we store the message and SSE clients will pick it up
-  global.latestMessage = message;
-}
+  const now = new Date();
+  let newMessage;
 
-// Export state for SSE endpoint to access
-export { chatState };
+  if (action === 'join') {
+    // Add user to Redis set
+    await redis.sadd('chat:users', username);
+
+    newMessage = {
+      id: Date.now(),
+      type: 'system',
+      message: `${username} joined the chat`,
+      timestamp: now.toISOString(),
+      username: null
+    };
+  } else if (action === 'leave') {
+    // Remove user from Redis set
+    await redis.srem('chat:users', username);
+
+    newMessage = {
+      id: Date.now(),
+      type: 'system',
+      message: `${username} left the chat`,
+      timestamp: now.toISOString(),
+      username: null
+    };
+  } else {
+    // Regular message
+    if (!message || !message.trim()) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Message cannot be empty' 
+      });
+    }
+
+    // Add user to Redis set (if not already present)
+    await redis.sadd('chat:users', username);
+
+    newMessage = {
+      id: Date.now(),
+      type: 'message',
+      message: message.trim(),
+      timestamp: now.toISOString(),
+      username: username
+    };
+  }
+
+  // Add to message history in Redis
+  await redis.rpush('chat:messages', JSON.stringify(newMessage));
+  // Keep only last 100 messages
+  await redis.ltrim('chat:messages', -100, -1);
+
+  // Get user count from Redis
+  const users = await redis.smembers('chat:users');
+
+  return res.status(200).json({
+    success: true,
+    messageId: newMessage.id,
+    userCount: users.length
+  });
+}
