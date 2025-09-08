@@ -1,0 +1,15 @@
+Join The Vercel Link:
+mini-network-chat.vercel.app
+
+Enter Name:
+Join through incognito or other devices to see 
+
+
+Start Chatting 
+
+
+TO Reset Chat
+Go to https://console.upstash.com/
+then CLI
+then enter prompt
+DEL chat:messages
