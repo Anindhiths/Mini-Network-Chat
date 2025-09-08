@@ -88,7 +88,7 @@ export default async function handler(req, res) {
   }
 
   // Add to message history in Redis
-  await redis.rpush('chat:messages', newMessage);
+  await redis.rpush('chat:messages', JSON.stringify(newMessage));
   // Keep only last 100 messages
   await redis.ltrim('chat:messages', -100, -1);
 
