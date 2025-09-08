@@ -1,10 +1,11 @@
 // api/join.js
 
-let chatData = {
-  users: new Set(),
-  messages: [],
-  messageId: 0
-};
+import { Redis } from '@upstash/redis';
+
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+});
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -20,8 +21,6 @@ export default async function handler(req, res) {
   }
 
   let body = req.body;
-
-  // If body is not parsed, parse it manually
   if (typeof body === 'string') {
     try {
       body = JSON.parse(body);
@@ -51,32 +50,39 @@ export default async function handler(req, res) {
     });
   }
 
-  if (chatData.users.has(trimmedUsername)) {
+  // Get users and messages from Redis
+  let users = (await redis.smembers('chat:users')) || [];
+  let messages = (await redis.lrange('chat:messages', 0, -1)).map(JSON.parse);
+
+  if (users.includes(trimmedUsername)) {
     return res.status(409).json({ 
       success: false, 
       error: 'Username already taken' 
     });
   }
 
-  chatData.users.add(trimmedUsername);
+  // Add user to Redis set
+  await redis.sadd('chat:users', trimmedUsername);
 
+  // Add system message
   const joinMessage = {
-    id: ++chatData.messageId,
+    id: Date.now(),
     type: 'system',
     message: `${trimmedUsername} joined the chat`,
     timestamp: new Date().toISOString(),
     username: null
   };
 
-  chatData.messages.push(joinMessage);
+  await redis.rpush('chat:messages', JSON.stringify(joinMessage));
+  // Keep only last 100 messages
+  await redis.ltrim('chat:messages', -100, -1);
 
-  if (chatData.messages.length > 100) {
-    chatData.messages = chatData.messages.slice(-100);
-  }
+  users.push(trimmedUsername);
 
   return res.status(200).json({
     success: true,
-    userCount: chatData.users.size,
-    messageId: chatData.messageId
+    userCount: users.length,
+    messageId: joinMessage.id
   });
 }
+
