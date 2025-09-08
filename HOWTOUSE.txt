@@ -13,3 +13,4 @@ Go to https://console.upstash.com/
 then CLI
 then enter prompt
 DEL chat:messages
+DEL chat:users
