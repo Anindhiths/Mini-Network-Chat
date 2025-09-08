@@ -70,7 +70,7 @@ export default async function handler(req, res) {
     username: trimmedUsername
   };
 
-  await redis.rpush('chat:messages', JSON.stringify(newMessage));
+  await redis.rpush('chat:messages', newMessage);
   // Keep only last 100 messages
   await redis.ltrim('chat:messages', -100, -1);
 
