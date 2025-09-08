@@ -51,9 +51,11 @@ required_files=(
     "api/join.js"
     "api/message.js" 
     "api/messages.js"
+    "api/send-message.js"  
     "vercel.json"
     "package.json"
 )
+
 
 for file in "${required_files[@]}"; do
     if [ ! -f "$file" ]; then
