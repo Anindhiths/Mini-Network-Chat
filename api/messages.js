@@ -25,7 +25,15 @@ export default async function handler(req, res) {
     const sinceId = since ? parseInt(since) : 0;
 
     // Get all messages from Redis
-    let messages = (await redis.lrange('chat:messages', 0, -1)).map(JSON.parse);
+    let rawMessages = await redis.lrange('chat:messages', 0, -1);
+    let messages = rawMessages.map(msg => {
+      try {
+        return typeof msg === 'string' ? JSON.parse(msg) : msg;
+      } catch (error) {
+        console.error('Error parsing message in messages:', msg, error);
+        return null;
+      }
+    }).filter(msg => msg !== null);
 
     // Filter messages since the specified ID
     const newMessages = messages.filter(msg => msg.id > sinceId);
