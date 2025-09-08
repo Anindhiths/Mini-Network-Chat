@@ -1,4 +1,3 @@
-# Create a Vercel configuration for frontend deployment
 vercel_config = '''{
   "version": 2,
   "name": "mini-network-chat",
@@ -28,12 +27,8 @@ vercel_config = '''{
     }
   },
   "env": {
-    "NODE_ENV": "production"
+    "NODE_ENV": "production",
+    "UPSTASH_REDIS_REST_URL": "@upstash_redis_rest_url",
+    "UPSTASH_REDIS_REST_TOKEN": "@upstash_redis_rest_token"
   }
 }'''
-
-# Save Vercel configuration
-with open('vercel.json', 'w') as f:
-    f.write(vercel_config)
-
-print("Vercel configuration created: vercel.json")
