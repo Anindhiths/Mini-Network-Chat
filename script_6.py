@@ -1,3 +1,5 @@
+# script_6.py
+
 # Create package.json for Vercel deployment
 vercel_package_json = '''{
   "name": "mini-network-chat-vercel",
@@ -9,7 +11,9 @@ vercel_package_json = '''{
     "build": "echo 'No build step needed for static frontend'",
     "deploy": "vercel --prod"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@upstash/redis": "^1.22.0"
+  },
   "devDependencies": {
     "vercel": "^32.0.0"
   },
