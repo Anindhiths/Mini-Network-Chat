@@ -352,7 +352,7 @@
             <div class="chat-title">💬 Mini Network Chat</div>
             <div class="chat-subtitle">
                 <span class="real-time-badge">REAL-TIME</span>
-                No bots • Real people only
+                Mini Network Chat
             </div>
         </div>
 
@@ -676,17 +676,7 @@
                 addSystemMessage("Welcome! Enter your username to start chatting with real people.");
 
                 // Add some demo messages to test scrolling (only if not connected)
-                setTimeout(() => {
-                    if (!connected) {
-                        addMessage("Alice", "Hey everyone! How's it going?", false);
-                        addMessage("Bob", "Great! Just testing this awesome chat app.", false);
-                        addMessage("Charlie", "The scrolling works perfectly now!", false);
-                        addMessage("Diana", "I love the smooth scroll to bottom feature.", false);
-                        addMessage("Eve", "This is a really nice chat interface.", false);
-                        addMessage("Frank", "The real-time updates are so smooth!", false);
-                        addSystemMessage("Demo messages loaded. Try scrolling up and see the scroll-to-bottom button!");
-                    }
-                }, 2000);
+                
             }
         }, 1000);
     </script>
