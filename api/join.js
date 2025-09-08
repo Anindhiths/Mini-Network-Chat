@@ -52,7 +52,15 @@ export default async function handler(req, res) {
 
   // Get users and messages from Redis
   let users = (await redis.smembers('chat:users')) || [];
-  let messages = (await redis.lrange('chat:messages', 0, -1)).map(JSON.parse);
+  let rawMessages = await redis.lrange('chat:messages', 0, -1);
+  let messages = rawMessages.map(msg => {
+    try {
+      return typeof msg === 'string' ? JSON.parse(msg) : msg;
+    } catch (error) {
+      console.error('Error parsing message in join:', msg, error);
+      return null;
+    }
+  }).filter(msg => msg !== null);
 
   if (users.includes(trimmedUsername)) {
     return res.status(409).json({ 
@@ -73,7 +81,7 @@ export default async function handler(req, res) {
     username: null
   };
 
-  await redis.rpush('chat:messages', joinMessage);
+  await redis.rpush('chat:messages', JSON.stringify(joinMessage));
   // Keep only last 100 messages
   await redis.ltrim('chat:messages', -100, -1);
 
