@@ -1,4 +1,4 @@
-# Mini Network Chat - Vercel Deployment
+# Mini Network Chat
 
 🚀 **Deploy your Mini Network Chat to Vercel in minutes!**
 
