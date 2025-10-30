@@ -1,297 +1,176 @@
-# Mini Network Chat
+# Mini-Network-Chat
 
-🚀 **Deploy your Mini Network Chat to Vercel in minutes!**
+A minimal real-time chat app using Server-Sent Events (SSE) for streaming updates and Upstash Redis for storage and presence. Built for serverless platforms (e.g., Vercel) to provide WebSocket-like behavior without maintaining socket infrastructure.
 
-This is a **serverless version** of the Mini Network Chat that can be deployed to Vercel's global edge network. It uses HTTP polling instead of WebSockets to work within serverless constraints.
+## Features
+- Real-time message streaming via SSE (`/api/chat-stream`)
+- Presence tracking: user count and list via Redis sets
+- Simple REST endpoints for joining and sending messages
+- Stateless serverless functions optimized for Vercel
+- Lightweight browser client (`public/index.html`)
 
-## ⚡ Quick Deploy
+## Tech Stack
+- Node.js (serverless functions)
+- Upstash Redis (REST API)
+- Vanilla JavaScript (client)
+- Vercel (deployment)
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/your-repo/mini-network-chat)
-
-## 🛠️ Manual Deployment
-
-### Prerequisites
-- [Vercel CLI](https://vercel.com/cli) installed
-- Node.js 18+ (for local development)
-
-### Deploy Steps
-
-1. **Clone/Setup Project**
-   ```bash
-   # Make sure you have these files:
-   # public/index.html
-   # api/join.js
-   # api/message.js  
-   # api/messages.js
-   # vercel.json
-   # package.json
-   ```
-
-2. **Install Vercel CLI** (if not already installed)
-   ```bash
-   npm install -g vercel
-   ```
-
-3. **Deploy to Vercel**
-   ```bash
-   vercel
-   # Follow the prompts:
-   # - Link to existing project or create new one
-   # - Choose settings (defaults are fine)
-   # - Deploy!
-   ```
-
-4. **Production Deployment**
-   ```bash
-   vercel --prod
-   ```
-
-Your chat will be live at `https://your-project.vercel.app`! 🎉
-
-## 🔍 Local Development
-
-```bash
-# Install Vercel CLI
-npm install -g vercel
-
-# Start local development server
-vercel dev
-
-# Open http://localhost:3000
+## Project Structure
+```
+.
+├─ api/
+│  ├─ chat-stream.js       # SSE endpoint: streams messages + presence
+│  ├─ clear-redis.js       # Utility: clear messages & users keys
+│  ├─ join.js              # Add a user to presence set
+│  ├─ message.js           # Fetch a single message (if implemented)
+│  ├─ messages.js          # List all messages
+│  ├─ send-message.js      # Append a new message to the list
+├─ public/
+│  └─ index.html           # Minimal chat client UI
+├─ HOWTOUSE.txt            # Usage notes
+├─ README.md               # This file
+├─ deploy_vercel.sh        # Vercel deployment helper
+├─ package.json            # Dependencies & scripts
+├─ script_3.py             # Utility script (internal)
+├─ script_8.py             # Utility script (internal)
+└─ vercel.json             # Vercel routing/config
 ```
 
-## 📁 Project Structure
+## How It Works
+- Messages are stored in Redis list `chat:messages` as JSON with fields like `id`, `user`, `text`, `timestamp`.
+- Presence is stored in Redis set `chat:users`.
+- `/api/chat-stream`:
+  - Responds with `Content-Type: text/event-stream`.
+  - On connect: sends recent messages (optionally filtered by `?since=<id>`) and a presence snapshot.
+  - Sends keep-alive `ping` events every 30s.
+  - Polls Redis every 3s for new messages and updated presence, streaming them to clients.
 
-```
-mini-network-chat-vercel/
-├── public/
-│   └── index.html          # Chat frontend
-├── api/
-│   ├── join.js            # User join endpoint
-│   ├── message.js         # Send message endpoint
-│   └── messages.js        # Poll messages endpoint
-├── vercel.json            # Vercel configuration
-├── package.json           # Dependencies
-└── README.md              # This file
-```
-
-## 🔄 How It Works (Serverless Architecture)
-
-### Original WebSocket Version
-```
-Browser ↔ WebSocket ↔ Bridge Server ↔ C Server
-```
-
-### Vercel Serverless Version  
-```
-Browser ↔ HTTP Polling ↔ Vercel Functions ↔ In-Memory Storage
-```
-
-### Key Differences
-
-| Feature | WebSocket Version | Vercel Version |
-|---------|------------------|----------------|
-| **Real-time** | Instant via WebSocket | ~2 second delay via polling |
-| **Backend** | Persistent Node.js + C server | Serverless functions |
-| **State** | Persistent in-memory | Ephemeral (resets on cold start) |
-| **Scaling** | Manual server management | Auto-scales globally |
-| **Cost** | Server hosting required | Pay per request |
-| **Setup** | Complex (3 components) | Simple (deploy and go) |
-
-## 🎯 API Endpoints
-
-### `POST /api/join`
-Join the chat with a username.
-```javascript
-// Request
-{
-  "username": "Alice"
-}
-
-// Response  
-{
-  "success": true,
-  "userCount": 5,
-  "messageId": 123
-}
-```
-
-### `POST /api/message`
-Send a message to the chat.
-```javascript
-// Request
-{
-  "username": "Alice",
-  "message": "Hello everyone!"
-}
-
-// Response
-{
-  "success": true,
-  "messageId": 124
-}
-```
-
-### `GET /api/messages?since=123`
-Get messages since a specific message ID.
-```javascript
-// Response
-{
-  "success": true,
-  "messages": [
-    {
-      "id": 124,
-      "type": "message",
-      "username": "Alice", 
-      "message": "Hello everyone!",
-      "timestamp": "2025-09-05T19:30:00Z"
-    }
-  ],
-  "userCount": 5,
-  "lastMessageId": 124
-}
-```
-
-## ⚙️ Configuration
-
-### Vercel Settings (`vercel.json`)
+Example SSE payloads:
 ```json
-{
-  "version": 2,
-  "functions": {
-    "api/*.js": {
-      "maxDuration": 30
-    }
-  }
-}
+{ "id": 42, "user": "alice", "text": "hello", "timestamp": 1694100000000 }
+{ "type": "user_count", "count": 3, "users": ["alice","bob","carol"] }
+{ "type": "ping" }
 ```
 
-### Environment Variables (Optional)
+## Prerequisites
+- Node.js 18+
+- Upstash Redis credentials:
+  - `UPSTASH_REDIS_REST_URL`
+  - `UPSTASH_REDIS_REST_TOKEN`
+- Optional: Vercel CLI
+
+## Environment Variables
+Create `.env.local` (local dev) or set env vars in your hosting provider:
+```
+UPSTASH_REDIS_REST_URL=your_upstash_redis_rest_url
+UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_rest_token
+```
+Security:
+- Never commit secrets.
+- Use environment variable management (Vercel/GitHub Actions).
+
+## Installation
 ```bash
-# In Vercel dashboard or .env.local
-CHAT_MAX_MESSAGES=100
-POLL_INTERVAL=2000
-MAX_MESSAGE_LENGTH=2000
+git clone https://github.com/Anindhiths/Mini-Network-Chat.git
+cd Mini-Network-Chat
+npm install
 ```
 
-## 🚧 Limitations & Considerations
+## Running Locally
+Using Vercel:
+```bash
+# Create and fill .env.local
+npx vercel dev
+# or
+npm run dev
+```
+Open the client:
+- Visit `http://localhost:3000` to load `public/index.html`.
 
-### Serverless Constraints
-- **No persistent storage**: Messages reset on cold starts
-- **Function timeouts**: 30 second maximum execution time  
-- **Memory limits**: Limited memory per function invocation
-- **Cold starts**: First request may be slower
+## API Overview
+Note: Adjust shapes to match your implementation.
 
-### Real-time Considerations
-- **Polling delay**: ~2 second latency vs instant WebSocket
-- **Battery usage**: More battery intensive than WebSocket
-- **Bandwidth**: More HTTP requests vs persistent connection
+- GET `/api/chat-stream?since=<id>`
+  - SSE stream of:
+    - Historical messages after `since`
+    - `user_count` snapshots
+    - `ping` keep-alives
+    - New messages as they arrive
+  - CORS: `Access-Control-Allow-Origin: *`.
 
-### Production Recommendations
-For production use, consider:
-- **Database integration** (PostgreSQL, Redis) for message persistence
-- **WebSocket alternatives** like Server-Sent Events (SSE)
-- **Rate limiting** to prevent spam
-- **Authentication** for user management
-- **Message moderation** and content filtering
+- POST `/api/join`
+  - Body: `{ "user": "alice" }`
+  - Adds the user to `chat:users`.
 
-## 🎨 Customization
+- POST `/api/send-message`
+  - Body: `{ "user": "alice", "text": "hello" }`
+  - Appends a message to `chat:messages`; ensure monotonic `id` and a `timestamp`.
 
-### Frontend Styling
-Edit `public/index.html` to customize:
-- Colors and themes
-- Layout and responsive design  
-- Message formatting
-- User interface elements
+- GET `/api/messages`
+  - Returns all messages from `chat:messages`.
 
-### Backend Logic
-Edit API functions to add:
-- User authentication
-- Message filtering
-- File upload support
-- Private messaging
-- Chat rooms/channels
+- GET `/api/message?id=42`
+  - Returns a single message (if implemented).
 
-### Deployment Options
-- **Custom domain**: Add your domain in Vercel dashboard
-- **Environment variables**: Configure via Vercel dashboard
-- **Analytics**: Enable Vercel Analytics for usage stats
-- **Edge functions**: Use Vercel Edge Functions for even faster response
+- POST `/api/clear-redis`
+  - Clears `chat:messages` and `chat:users`. Use with caution.
 
-## 🔄 Migration from WebSocket Version
-
-If you have the original WebSocket version:
-
-1. **Keep both versions**: Different use cases
-   - **WebSocket**: Development, local networks, real-time needs
-   - **Serverless**: Public demos, global deployment, no server management
-
-2. **Data migration**: 
-   - WebSocket version: File-based or database storage
-   - Serverless version: Add database integration (see Production section)
-
-3. **Feature parity**:
-   - ✅ Multi-user chat
-   - ✅ Real-time messaging (with polling delay)
-   - ✅ User join/leave notifications  
-   - ✅ Message history
-   - ❌ Persistent storage (requires database)
-   - ❌ Instant real-time (2-second polling delay)
-
-## 🌍 Global Deployment
-
-Vercel automatically deploys to global edge locations:
-- **Americas**: Washington D.C., San Francisco
-- **Europe**: London, Frankfurt  
-- **Asia**: Singapore, Tokyo
-- **Performance**: <100ms response times globally
-
-## 📊 Monitoring & Analytics
-
-### Vercel Dashboard
-- Function execution logs
-- Performance metrics  
-- Error tracking
-- Usage statistics
-
-### Custom Analytics
-Add to your frontend:
-```javascript
-// Track user engagement
-fetch('/api/analytics', {
-  method: 'POST',
-  body: JSON.stringify({
-    event: 'message_sent',
-    username: username
-  })
-});
+## Client Usage
+`public/index.html` subscribes to SSE and renders updates. Minimal example:
+```html
+<script>
+  const es = new EventSource('/api/chat-stream');
+  es.onmessage = (evt) => {
+    const data = JSON.parse(evt.data);
+    if (data.type === 'user_count') {
+      // update presence UI
+    } else if (data.type === 'ping') {
+      // optional: noop
+    } else {
+      // render message
+    }
+  };
+</script>
 ```
 
-## 🤝 Contributing
+## Deployment
+- Vercel:
+  - Add env vars in dashboard.
+  - Deploy:
+    ```bash
+    npx vercel --prod
+    # or
+    ./deploy_vercel.sh
+    ```
+- Other platforms:
+  - Ensure support for long-lived HTTP responses (SSE).
+  - Disable response buffering where necessary.
 
-The Vercel version is part of the larger Mini Network Chat educational project:
-- **Original C Server**: Learn socket programming fundamentals
-- **WebSocket Bridge**: Understand protocol translation
-- **Serverless Version**: Experience modern deployment practices
+## Operational Notes
+- SSE is one-way (server→client). Writes use REST endpoints; reads use SSE.
+- Keep-alive pings (30s) help avoid idle timeouts.
+- Polling interval (3s) can be tuned in `api/chat-stream.js`.
 
-Feel free to:
-- Add database persistence
-- Implement authentication
-- Create mobile apps
-- Add file sharing
-- Build chat rooms
+## Scaling & Reliability
+- Upstash rate limits: adjust polling to fit tier constraints.
+- Trimming: periodically `LTRIM chat:messages` to cap list size.
+- Message IDs: consider a Redis counter (`INCR chat:next_id`) to guarantee monotonic IDs.
+- Error handling:
+  - Malformed JSON messages are skipped (logged).
+  - Intervals cleared on client disconnect (`req.close`/`req.error`).
+- Resume support: clients can reconnect with `?since=<id>` to backfill.
 
-## 📚 Learning Outcomes
+## Scripts
+Common `package.json` scripts:
+- `dev` — local development
+- `deploy` — deployment helper
+Adjust as needed.
 
-This Vercel deployment teaches:
-- **Serverless architecture** patterns
-- **HTTP polling** vs WebSocket trade-offs  
-- **Global deployment** strategies
-- **API design** for real-time-ish applications
-- **Modern web development** workflows
+## Contributing
+1. Fork the repo
+2. Create a feature branch
+3. Commit with clear messages
+4. Open a PR with rationale and testing notes
 
----
-
-**Original Project**: [Mini Network Chat C Implementation]
-**WebSocket Version**: [Bridge Server Documentation]  
-**Vercel Version**: You are here! 🎯
+## License
+MIT
